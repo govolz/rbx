@@ -160,6 +160,20 @@
     border-radius:6px;padding:4px 9px;font-size:11px;font-family:var(--mono);
     letter-spacing:0;text-transform:none;cursor:pointer;white-space:nowrap}
   .ex-btn:hover{border-color:var(--amber-dim);color:var(--amber)}
+  .fpresets{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;
+    border-top:1px solid var(--edge);flex-wrap:wrap}
+  .fp-label{font-family:var(--display);letter-spacing:.14em;text-transform:uppercase;
+    font-size:10px;color:var(--muted);flex-shrink:0}
+  .fp-slots{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+  .fp-io{display:flex;gap:6px;flex-shrink:0}
+  .fp-slot{display:flex;align-items:center;gap:7px;background:var(--panel-2);
+    border:1px solid var(--edge);border-radius:20px;padding:5px 11px;font-size:12px;
+    color:var(--text);cursor:pointer;font-family:var(--mono);max-width:230px}
+  .fp-slot.empty{border-style:dashed;color:var(--muted-2);background:transparent}
+  .fp-slot:hover{border-color:var(--amber-dim)}
+  .fp-slot .fp-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fp-slot .fp-x{color:var(--muted-2);font-size:11px;flex-shrink:0}
+  .fp-slot .fp-x:hover{color:var(--danger)}
 
   .facet-body{padding:8px;max-height:none}
   .genre{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -359,6 +373,15 @@
       <button class="btn" data-quick="topclick">♪ Most Played</button>
       <button class="btn" data-quick="random">⤮ Surprise Me</button>
       <button class="btn" id="clearBtn">✕ Clear filters</button>
+    </div>
+    <div class="fpresets">
+      <span class="fp-label">Filter Presets</span>
+      <div class="fp-slots" id="fpSlots"></div>
+      <span class="fp-io">
+        <button class="ex-btn" id="fpBackup" title="Backup filter presets (JSON)">⤓</button>
+        <button class="ex-btn" id="fpRestore" title="Restore filter presets (JSON)">⤒</button>
+        <input type="file" id="fpRestoreFile" accept="application/json,.json" style="display:none">
+      </span>
     </div>
   </div>
 
@@ -1028,10 +1051,84 @@
   function fmt(n){ n=+n||0; return n>=1000?(n/1000).toFixed(n>=10000?0:1)+"k":n; }
   function cap(s){ return String(s).replace(/\b\w/g,c=>c.toUpperCase()); }
 
+  // ---------- Filter presets (saved search setups) ----------
+  let filterSlots = load("rbx_filterslots", [null,null,null,null,null,null]);
+  if(!Array.isArray(filterSlots)) filterSlots=[];
+  while(filterSlots.length<6) filterSlots.push(null);
+  filterSlots = filterSlots.slice(0,6);
+
+  function saveFilterSlots(){ save("rbx_filterslots", filterSlots); }
+  function captureFilters(){
+    return {
+      name:$("fName").value.trim(), tag:$("fTag").value.trim(), lang:$("fLang").value.trim(),
+      country:$("fCountry").value.trim(), codec:$("fCodec").value, quality:$("fQuality").value,
+      sort:$("fSort").value, limit:$("fLimit").value, broken:$("fBroken").checked
+    };
+  }
+  function filterLabel(f){
+    const bits=[];
+    if(f.country) bits.push(f.country.length<=3 ? f.country.toUpperCase() : cap(f.country));
+    if(f.tag) bits.push(f.tag);
+    if(f.lang) bits.push(cap(f.lang));
+    if(f.codec) bits.push(f.codec);
+    if(f.quality && QUALITY[f.quality]) bits.push(QUALITY[f.quality].label);
+    if(f.name) bits.push('"'+f.name+'"');
+    return bits.length ? bits.join(" · ") : "All / default";
+  }
+  function saveFilterSlot(i){ filterSlots[i]=captureFilters(); saveFilterSlots(); renderFilterSlots(); toast("Saved to slot "+(i+1)); }
+  function loadFilterSlot(i){
+    const f=filterSlots[i]; if(!f) return;
+    $("fName").value=f.name||""; $("fTag").value=f.tag||""; $("fLang").value=f.lang||"";
+    $("fCountry").value=f.country||""; $("fCodec").value=f.codec||""; $("fQuality").value=f.quality||"";
+    $("fSort").value=f.sort||"votes"; $("fLimit").value=f.limit||"120"; $("fBroken").checked=(f.broken!==false);
+    markGenre(f.tag||null);
+    runSearch();
+    toast("Loaded: "+filterLabel(f));
+  }
+  function renderFilterSlots(){
+    const host=$("fpSlots"); host.innerHTML="";
+    filterSlots.forEach((f,i)=>{
+      const chip=document.createElement("div");
+      if(f){
+        chip.className="fp-slot";
+        const nm=document.createElement("span"); nm.className="fp-name"; nm.textContent=filterLabel(f);
+        nm.title="Load: "+filterLabel(f); nm.onclick=()=>loadFilterSlot(i);
+        const x=document.createElement("span"); x.className="fp-x"; x.textContent="\u2715"; x.title="Clear slot";
+        x.onclick=(e)=>{ e.stopPropagation(); filterSlots[i]=null; saveFilterSlots(); renderFilterSlots(); };
+        chip.appendChild(nm); chip.appendChild(x);
+      }else{
+        chip.className="fp-slot empty"; chip.textContent="\uFF0B Slot "+(i+1);
+        chip.title="Save current filters to this slot"; chip.onclick=()=>saveFilterSlot(i);
+      }
+      host.appendChild(chip);
+    });
+  }
+  $("fpBackup").onclick=()=>{
+    download("rbx-filter-presets.json", JSON.stringify(filterSlots,null,2), "application/json");
+    toast("Filter presets backed up");
+  };
+  $("fpRestore").onclick=()=>$("fpRestoreFile").click();
+  $("fpRestoreFile").onchange=e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const d=JSON.parse(r.result);
+        if(!Array.isArray(d)) throw new Error("bad");
+        filterSlots = d.slice(0,6);
+        while(filterSlots.length<6) filterSlots.push(null);
+        saveFilterSlots(); renderFilterSlots(); toast("Filter presets restored");
+      }catch(err){ toast("Couldn't read that file"); }
+      $("fpRestoreFile").value="";
+    };
+    r.readAsText(file);
+  };
+
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.03g";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.04";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
+  renderFilterSlots();
   initServer().then(()=>{ loadGenres(); loadCountries(); });
 
 })();
