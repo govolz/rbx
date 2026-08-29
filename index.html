@@ -861,8 +861,6 @@
     else { ni = (idx + delta + lastResults.length) % lastResults.length; }
     const s = lastResults[ni];
     play(s);
-    const btn=document.querySelector('.playbtn[data-uuid="'+s.stationuuid+'"]');
-    if(btn){ const row=btn.closest(".station"); if(row) row.scrollIntoView({block:"center",behavior:"smooth"}); }
   }
   $("prevBtn").onclick=()=>playByOffset(-1);
   $("nextBtn").onclick=()=>playByOffset(1);
@@ -1171,7 +1169,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.29c";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.29d";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
