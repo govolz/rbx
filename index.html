@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>RBX — Radio Browser Explorer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -117,6 +117,20 @@
   .tbtn.stop,.tbtn.play{color:var(--amber);border-color:var(--amber-dim)}
   .tbtn.stop:disabled,.tbtn.play:disabled{color:var(--muted-2);border-color:var(--edge);opacity:.55}
   .btn.active{border-color:var(--amber-dim);color:var(--amber);background:rgba(245,166,35,.1)}
+  .floatplayer{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;align-items:center;
+    gap:12px;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
+    background:rgba(20,25,32,.97);border-top:1px solid var(--edge);
+    box-shadow:0 -12px 30px -20px #000;transform:translateY(130%);
+    transition:transform .28s ease;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  .floatplayer.show{transform:translateY(0)}
+  .fp-now{flex:1;min-width:0;display:flex;align-items:center;gap:9px}
+  .fp-dot{width:8px;height:8px;border-radius:50%;background:var(--muted-2);flex-shrink:0}
+  body.playing .fp-dot{background:var(--signal);box-shadow:0 0 8px var(--signal)}
+  .fp-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;color:var(--text)}
+  .fp-controls{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .tbtn.sm{width:38px;height:38px}
+  .tbtn.sm svg{width:17px;height:17px}
+  body.has-float .wrap{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
   .btn{
     background:var(--panel-2);color:var(--text);border:1px solid var(--edge);
     border-radius:8px;padding:8px 12px;font-size:13px;display:inline-flex;
@@ -458,6 +472,18 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="floatplayer" id="floatPlayer">
+  <div class="fp-now">
+    <span class="fp-dot"></span>
+    <span class="fp-title" id="fpNow">—</span>
+  </div>
+  <div class="fp-controls">
+    <button class="tbtn sm" id="fpPrev" title="Previous" aria-label="Previous"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7z"/><path d="M20 6v12l-9-6z"/></svg></button>
+    <button class="tbtn sm play" id="fpPlay" title="Play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+    <button class="tbtn sm" id="fpNext" title="Next" aria-label="Next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2z"/><path d="M4 6l9 6-9 6z"/></svg></button>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -834,19 +860,24 @@
 
   const ICON_PLAY  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  function setNowPlaying(t){ $("npName").textContent=t; $("fpNow").textContent=t; }
+  function showFloatPlayer(){ $("floatPlayer").classList.add("show"); document.body.classList.add("has-float"); }
   function updatePlayToggle(){
     const playing = !audio.paused && audio.src;
-    const b=$("playToggle");
-    b.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
-    b.title = playing ? "Pause" : "Play";
-    b.setAttribute("aria-label", playing ? "Pause" : "Play");
+    [$("playToggle"), $("fpPlay")].forEach(b=>{
+      if(!b) return;
+      b.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+      b.title = playing ? "Pause" : "Play";
+      b.setAttribute("aria-label", playing ? "Pause" : "Play");
+    });
   }
 
   function play(s){
     const url=s.url_resolved||s.url;
     currentUuid=s.stationuuid;
-    $("npName").textContent=s.name||"(unnamed)";
+    setNowPlaying(s.name||"(unnamed)");
     $("playToggle").disabled=false;
+    showFloatPlayer();
     audio.src=url; audio.play().then(()=>{
       autoSkips=0;
       // register a click with radio-browser (community stats, best-effort)
@@ -860,7 +891,7 @@
   function stop(){
     audio.pause(); audio.removeAttribute("src"); audio.load();
     document.body.classList.remove("playing");
-    $("npName").textContent="— stopped —";
+    setNowPlaying("— stopped —");
     currentUuid=null;
     updatePlayToggle();
     document.querySelectorAll(".playbtn.playing").forEach(b=>{b.classList.remove("playing");b.innerHTML="▶ Play";});
@@ -877,6 +908,9 @@
   audio.onplay  = ()=>{ document.body.classList.add("playing"); updatePlayToggle(); };
   audio.onpause = ()=>{ document.body.classList.remove("playing"); updatePlayToggle(); };
   $("playToggle").onclick=togglePlay;
+  $("fpPlay").onclick=togglePlay;
+  $("fpPrev").onclick=()=>playByOffset(-1);
+  $("fpNext").onclick=()=>playByOffset(1);
   function playByOffset(delta){
     if(!lastResults.length) return toast("No results to step through — run a search first");
     let idx = lastResults.findIndex(s=>s.stationuuid===currentUuid);
@@ -949,8 +983,9 @@
     });
   }
   function play_stub(p){
-    currentUuid=p.uuid; $("npName").textContent=p.name||"(unnamed)";
+    currentUuid=p.uuid; setNowPlaying(p.name||"(unnamed)");
     $("playToggle").disabled=false;
+    showFloatPlayer();
     audio.src=p.url; audio.play()
       .catch(()=>toast("Browser can't decode this — works in foobar though"));
   }
@@ -1194,7 +1229,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.29e";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.29f";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
