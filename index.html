@@ -106,6 +106,17 @@
   @keyframes drift{from{left:46%}to{left:54%}}
 
   .transport{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .tcluster{display:flex;align-items:center;gap:8px}
+  .tbtn{width:42px;height:42px;border-radius:50%;background:var(--panel-2);
+    border:1px solid var(--edge);color:var(--text);display:inline-flex;align-items:center;
+    justify-content:center;cursor:pointer;transition:border-color .15s,background .15s,transform .06s}
+  .tbtn svg{width:19px;height:19px;fill:currentColor;display:block}
+  .tbtn:hover:not(:disabled){border-color:var(--amber-dim);color:var(--amber);background:#20272f}
+  .tbtn:active:not(:disabled){transform:scale(.92)}
+  .tbtn:disabled{opacity:.4;cursor:default}
+  .tbtn.stop{color:var(--amber);border-color:var(--amber-dim)}
+  .tbtn.stop:disabled{color:var(--muted-2);border-color:var(--edge);opacity:.55}
+  .btn.active{border-color:var(--amber-dim);color:var(--amber);background:rgba(245,166,35,.1)}
   .btn{
     background:var(--panel-2);color:var(--text);border:1px solid var(--edge);
     border-radius:8px;padding:8px 12px;font-size:13px;display:inline-flex;
@@ -319,7 +330,12 @@
     </div>
 
     <div class="transport">
-      <button class="btn amber" id="stopBtn" disabled>■ Stop</button>
+      <div class="tcluster">
+        <button class="tbtn" id="prevBtn" title="Previous station in results" aria-label="Previous"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7z"/><path d="M20 6v12l-9-6z"/></svg></button>
+        <button class="tbtn stop" id="stopBtn" disabled title="Stop" aria-label="Stop"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+        <button class="tbtn" id="nextBtn" title="Next station in results" aria-label="Next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2z"/><path d="M4 6l9 6-9 6z"/></svg></button>
+      </div>
+      <button class="btn" id="autoBtn" title="Auto-skip to the next station when a stream won't play">⟳ Auto</button>
       <button class="btn" id="presetsBtn">★ Presets <span id="presetCount" style="font-family:var(--mono);color:var(--muted)">(0)</span></button>
       <div class="vol">
         <span>VOL</span>
@@ -821,10 +837,11 @@
     audio.src=url; audio.play().then(()=>{
       document.body.classList.add("playing");
       $("stopBtn").disabled=false;
+      autoSkips=0;
       // register a click with radio-browser (community stats, best-effort)
       fetch(API_BASE+"/json/url/"+s.stationuuid).catch(()=>{});
     }).catch(()=>{
-      toast("Browser can't decode this stream — but the URL still works in foobar");
+      if(!streamFailed()) toast("Browser can't decode this stream — but the URL still works in foobar");
     });
     document.querySelectorAll(".playbtn.playing").forEach(b=>{b.classList.remove("playing");b.innerHTML="▶ Play";});
     document.querySelectorAll('.playbtn[data-uuid="'+s.stationuuid+'"]').forEach(b=>{b.classList.add("playing");b.innerHTML="♪ Playing";});
@@ -836,7 +853,36 @@
     document.querySelectorAll(".playbtn.playing").forEach(b=>{b.classList.remove("playing");b.innerHTML="▶ Play";});
   }
   $("stopBtn").onclick=stop;
-  audio.onerror=()=>{ if(audio.src){toast("Stream error — URL still valid for foobar");} };
+  function playByOffset(delta){
+    if(!lastResults.length) return toast("No results to step through — run a search first");
+    let idx = lastResults.findIndex(s=>s.stationuuid===currentUuid);
+    let ni;
+    if(idx<0){ ni = delta>0 ? 0 : lastResults.length-1; }
+    else { ni = (idx + delta + lastResults.length) % lastResults.length; }
+    const s = lastResults[ni];
+    play(s);
+    const btn=document.querySelector('.playbtn[data-uuid="'+s.stationuuid+'"]');
+    if(btn){ const row=btn.closest(".station"); if(row) row.scrollIntoView({block:"center",behavior:"smooth"}); }
+  }
+  $("prevBtn").onclick=()=>playByOffset(-1);
+  $("nextBtn").onclick=()=>playByOffset(1);
+
+  let autoAdvance = load("rbx_auto", false), autoSkips = 0;
+  function streamFailed(){
+    if(autoAdvance && lastResults.length){
+      if(autoSkips < Math.min(lastResults.length, 15)){ autoSkips++; setTimeout(()=>playByOffset(1), 500); return true; }
+      autoSkips = 0; toast("No working stream found nearby");
+    }
+    return false;
+  }
+  $("autoBtn").onclick=()=>{
+    autoAdvance=!autoAdvance; save("rbx_auto", autoAdvance);
+    $("autoBtn").classList.toggle("active", autoAdvance);
+    toast(autoAdvance ? "Auto-skip on — dead streams advance automatically" : "Auto-skip off");
+  };
+  $("autoBtn").classList.toggle("active", autoAdvance);
+
+  audio.onerror=()=>{ if(audio.src){ if(!streamFailed()) toast("Stream error — URL still valid for foobar"); } };
 
   // ---------- Presets ----------
   function num(v){ const n=parseFloat(v); return isFinite(n)?n:null; }
@@ -1125,7 +1171,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.04";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.29c";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
