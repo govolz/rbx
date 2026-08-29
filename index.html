@@ -114,8 +114,8 @@
   .tbtn:hover:not(:disabled){border-color:var(--amber-dim);color:var(--amber);background:#20272f}
   .tbtn:active:not(:disabled){transform:scale(.92)}
   .tbtn:disabled{opacity:.4;cursor:default}
-  .tbtn.stop{color:var(--amber);border-color:var(--amber-dim)}
-  .tbtn.stop:disabled{color:var(--muted-2);border-color:var(--edge);opacity:.55}
+  .tbtn.stop,.tbtn.play{color:var(--amber);border-color:var(--amber-dim)}
+  .tbtn.stop:disabled,.tbtn.play:disabled{color:var(--muted-2);border-color:var(--edge);opacity:.55}
   .btn.active{border-color:var(--amber-dim);color:var(--amber);background:rgba(245,166,35,.1)}
   .btn{
     background:var(--panel-2);color:var(--text);border:1px solid var(--edge);
@@ -332,7 +332,7 @@
     <div class="transport">
       <div class="tcluster">
         <button class="tbtn" id="prevBtn" title="Previous station in results" aria-label="Previous"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7z"/><path d="M20 6v12l-9-6z"/></svg></button>
-        <button class="tbtn stop" id="stopBtn" disabled title="Stop" aria-label="Stop"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+        <button class="tbtn play" id="playToggle" disabled title="Play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
         <button class="tbtn" id="nextBtn" title="Next station in results" aria-label="Next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2z"/><path d="M4 6l9 6-9 6z"/></svg></button>
       </div>
       <button class="btn" id="autoBtn" title="Auto-skip to the next station when a stream won't play">⟳ Auto</button>
@@ -476,6 +476,7 @@
     "at1.api.radio-browser.info",
     "fi1.api.radio-browser.info"
   ];
+  const DEFAULT_HOST = "de1.api.radio-browser.info";
   let serverHosts = [];
   async function initServer(){
     let fetched = [];
@@ -484,7 +485,7 @@
       fetched = servers.map(s=>s.name).filter(Boolean);
     }catch(e){ /* offline/blocked — fall back to known mirrors */ }
     serverHosts = [...new Set([...fetched, ...KNOWN_SERVERS])].sort();
-    API_BASE = "https://" + serverHosts[Math.floor(Math.random()*serverHosts.length)];
+    API_BASE = "https://" + (serverHosts.includes(DEFAULT_HOST) ? DEFAULT_HOST : serverHosts[0]);
     populateServers();
     setServer("on");
   }
@@ -753,6 +754,7 @@
     if(tier){ clean=clean.filter(s=>effectiveKbps(s) >= tier.mp3eq); }
     $("resultsCount").textContent = clean.length;
     lastResults = clean;
+    $("playToggle").disabled = clean.length===0;
     if(!clean.length){
       $("results").innerHTML='<div class="status">No stations matched. Loosen a filter — genre + language + country together can get narrow fast.</div>';
       return;
@@ -830,13 +832,22 @@
   $("vol").oninput=e=>{audio.volume=parseFloat(e.target.value);};
   audio.volume=0.9;
 
+  const ICON_PLAY  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  function updatePlayToggle(){
+    const playing = !audio.paused && audio.src;
+    const b=$("playToggle");
+    b.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    b.title = playing ? "Pause" : "Play";
+    b.setAttribute("aria-label", playing ? "Pause" : "Play");
+  }
+
   function play(s){
     const url=s.url_resolved||s.url;
     currentUuid=s.stationuuid;
     $("npName").textContent=s.name||"(unnamed)";
+    $("playToggle").disabled=false;
     audio.src=url; audio.play().then(()=>{
-      document.body.classList.add("playing");
-      $("stopBtn").disabled=false;
       autoSkips=0;
       // register a click with radio-browser (community stats, best-effort)
       fetch(API_BASE+"/json/url/"+s.stationuuid).catch(()=>{});
@@ -848,11 +859,24 @@
   }
   function stop(){
     audio.pause(); audio.removeAttribute("src"); audio.load();
-    document.body.classList.remove("playing"); $("stopBtn").disabled=true;
+    document.body.classList.remove("playing");
     $("npName").textContent="— stopped —";
+    currentUuid=null;
+    updatePlayToggle();
     document.querySelectorAll(".playbtn.playing").forEach(b=>{b.classList.remove("playing");b.innerHTML="▶ Play";});
   }
-  $("stopBtn").onclick=stop;
+  function togglePlay(){
+    if(!audio.paused && audio.src){ audio.pause(); return; }          // playing -> pause
+    if(audio.src && currentUuid){                                     // paused -> resume
+      audio.play().catch(()=>{ if(!streamFailed()) toast("Couldn't resume this stream"); });
+      return;
+    }
+    if(lastResults.length){ play(lastResults[0]); }                   // nothing cued -> start list
+    else toast("Run a search first, then press play");
+  }
+  audio.onplay  = ()=>{ document.body.classList.add("playing"); updatePlayToggle(); };
+  audio.onpause = ()=>{ document.body.classList.remove("playing"); updatePlayToggle(); };
+  $("playToggle").onclick=togglePlay;
   function playByOffset(delta){
     if(!lastResults.length) return toast("No results to step through — run a search first");
     let idx = lastResults.findIndex(s=>s.stationuuid===currentUuid);
@@ -926,7 +950,8 @@
   }
   function play_stub(p){
     currentUuid=p.uuid; $("npName").textContent=p.name||"(unnamed)";
-    audio.src=p.url; audio.play().then(()=>{document.body.classList.add("playing");$("stopBtn").disabled=false;})
+    $("playToggle").disabled=false;
+    audio.src=p.url; audio.play()
       .catch(()=>toast("Browser can't decode this — works in foobar though"));
   }
 
@@ -1169,7 +1194,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.29d";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.29e";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
