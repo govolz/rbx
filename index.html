@@ -130,6 +130,8 @@
   .fp-controls{display:flex;align-items:center;gap:8px;flex-shrink:0}
   .tbtn.sm{width:38px;height:38px}
   .tbtn.sm svg{width:17px;height:17px}
+  .fpstar{font-size:19px;line-height:1}
+  .fpstar.on{color:var(--amber);border-color:var(--amber-dim)}
   body.has-float .wrap{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
   @media(max-width:820px){
     .floatplayer{padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));gap:14px}
@@ -138,6 +140,7 @@
     .floatplayer .fp-title{font-size:16px}
     .floatplayer .fp-controls{gap:12px}
     .floatplayer .fp-dot{width:10px;height:10px}
+    .floatplayer .fpstar{font-size:26px}
     body.has-float .wrap{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
   }
   .btn{
@@ -488,6 +491,7 @@
     <span class="fp-title" id="fpNow">—</span>
   </div>
   <div class="fp-controls">
+    <button class="tbtn sm fpstar" id="fpStar" title="Save to presets" aria-label="Save to presets">☆</button>
     <button class="tbtn sm" id="fpPrev" title="Previous" aria-label="Previous"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7z"/><path d="M20 6v12l-9-6z"/></svg></button>
     <button class="tbtn sm play" id="fpPlay" title="Play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
     <button class="tbtn sm" id="fpNext" title="Next" aria-label="Next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2z"/><path d="M4 6l9 6-9 6z"/></svg></button>
@@ -552,6 +556,7 @@
   // ---------- State ----------
   let presets = load("rbx_presets", []);
   let currentUuid = null;
+  let currentStation = null;
   let lastResults = [];
   const $ = (id)=>document.getElementById(id);
 
@@ -871,6 +876,12 @@
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
   function setNowPlaying(t){ $("npName").textContent=t; $("fpNow").textContent=t; }
   function showFloatPlayer(){ $("floatPlayer").classList.add("show"); document.body.classList.add("has-float"); }
+  function updateFpStar(){
+    const b=$("fpStar");
+    const on = currentStation && currentStation.uuid && presets.some(p=>p.uuid===currentStation.uuid);
+    b.textContent = on ? "★" : "☆";
+    b.classList.toggle("on", !!on);
+  }
   function updatePlayToggle(){
     const playing = !audio.paused && audio.src;
     [$("playToggle"), $("fpPlay")].forEach(b=>{
@@ -884,9 +895,10 @@
   function play(s){
     const url=s.url_resolved||s.url;
     currentUuid=s.stationuuid;
+    currentStation={uuid:s.stationuuid, name:s.name, url:url, homepage:s.homepage||"", lat:num(s.geo_lat), lon:num(s.geo_long)};
     setNowPlaying(s.name||"(unnamed)");
     $("playToggle").disabled=false;
-    showFloatPlayer();
+    showFloatPlayer(); updateFpStar();
     audio.src=url; audio.play().then(()=>{
       autoSkips=0;
       // register a click with radio-browser (community stats, best-effort)
@@ -920,6 +932,7 @@
   $("fpPlay").onclick=togglePlay;
   $("fpPrev").onclick=()=>playByOffset(-1);
   $("fpNext").onclick=()=>playByOffset(1);
+  $("fpStar").onclick=()=>{ if(currentStation){ saveMapItem(currentStation); updateFpStar(); } };
   function playByOffset(delta){
     if(!lastResults.length) return toast("No results to step through — run a search first");
     let idx = lastResults.findIndex(s=>s.stationuuid===currentUuid);
@@ -992,9 +1005,10 @@
     });
   }
   function play_stub(p){
-    currentUuid=p.uuid; setNowPlaying(p.name||"(unnamed)");
+    currentUuid=p.uuid; currentStation={uuid:p.uuid, name:p.name, url:p.url, homepage:p.homepage||"", lat:num(p.lat), lon:num(p.lon)};
+    setNowPlaying(p.name||"(unnamed)");
     $("playToggle").disabled=false;
-    showFloatPlayer();
+    showFloatPlayer(); updateFpStar();
     audio.src=p.url; audio.play()
       .catch(()=>toast("Browser can't decode this — works in foobar though"));
   }
@@ -1070,6 +1084,7 @@
       b.className = "mini favbtn" + (on?" on":"");
       b.innerHTML = on ? "★ Saved" : "☆ Save";
     });
+    if(typeof updateFpStar==="function") updateFpStar();
   }
 
   $("presetsBtn").onclick=()=>{ $("drawer").classList.add("open"); $("overlay").classList.add("open"); };
@@ -1238,7 +1253,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.29g";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.29h";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
