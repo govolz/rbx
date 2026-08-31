@@ -946,6 +946,10 @@
     setMS('previoustrack', ()=>playByOffset(-1));
     setMS('nexttrack',     ()=>playByOffset(1));
     setMS('stop',          ()=>stop());
+    // suppress the default 10s seek buttons so iOS shows prev/next track instead
+    setMS('seekbackward',  null);
+    setMS('seekforward',   null);
+    setMS('seekto',        null);
   }
   $("playToggle").onclick=togglePlay;
   $("fpPlay").onclick=togglePlay;
@@ -1431,7 +1435,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.31e";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.31f";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
