@@ -946,9 +946,10 @@
     setMS('previoustrack', ()=>playByOffset(-1));
     setMS('nexttrack',     ()=>playByOffset(1));
     setMS('stop',          ()=>stop());
-    // suppress the default 10s seek buttons so iOS shows prev/next track instead
-    setMS('seekbackward',  null);
-    setMS('seekforward',   null);
+    // iOS often insists on showing seek buttons for live audio; make them skip stations too,
+    // so whichever control the phone/car sends, it moves through the station list.
+    setMS('seekbackward',  ()=>playByOffset(-1));
+    setMS('seekforward',   ()=>playByOffset(1));
     setMS('seekto',        null);
   }
   $("playToggle").onclick=togglePlay;
@@ -1435,7 +1436,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.31f";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.31g";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
