@@ -936,9 +936,17 @@
     if(lastResults.length){ play(lastResults[0]); }                              // start list
     else toast("Run a search first, then press play");
   }
-  audio.onplay    = ()=>{ document.body.classList.add("playing"); updatePlayToggle(); };
-  audio.onpause   = ()=>{ document.body.classList.remove("playing"); updatePlayToggle(); };
+  audio.onplay    = ()=>{ document.body.classList.add("playing"); updatePlayToggle(); if('mediaSession' in navigator) navigator.mediaSession.playbackState="playing"; };
+  audio.onpause   = ()=>{ document.body.classList.remove("playing"); updatePlayToggle(); if('mediaSession' in navigator) navigator.mediaSession.playbackState="paused"; };
   audio.onplaying = ()=>{ clearGrace(); autoSkips=0; };   // real playback started → this one is good
+  if('mediaSession' in navigator){
+    const setMS=(a,h)=>{ try{ navigator.mediaSession.setActionHandler(a,h); }catch(e){} };
+    setMS('play',          ()=>{ if(audio.paused) togglePlay(); });
+    setMS('pause',         ()=>{ if(!audio.paused) audio.pause(); });
+    setMS('previoustrack', ()=>playByOffset(-1));
+    setMS('nexttrack',     ()=>playByOffset(1));
+    setMS('stop',          ()=>stop());
+  }
   $("playToggle").onclick=togglePlay;
   $("fpPlay").onclick=togglePlay;
   $("fpPrev").onclick=()=>playByOffset(-1);
@@ -1031,6 +1039,24 @@
     }else{
       stats.hidden = true; stats.innerHTML="";
     }
+    updateMediaSession();
+  }
+  function updateMediaSession(){
+    if(!('mediaSession' in navigator)) return;
+    try{
+      if(currentStation && currentStation.uuid){
+        const loc=[currentStation.country||(countryByCode[currentStation.countrycode]||currentStation.countrycode||""), currentStation.state].filter(Boolean).join(" · ");
+        const art = currentStation.favicon ? [{src:currentStation.favicon, sizes:"256x256"}] : [];
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentStation.name || "Radio",
+          artist: loc || "RBX Radio",
+          album: (currentStation.tags||"").split(",").map(x=>x.trim()).filter(Boolean).slice(0,3).join(", "),
+          artwork: art
+        });
+      }else{
+        navigator.mediaSession.metadata = null;
+      }
+    }catch(e){}
   }
   function isSaved(uuid){ return presets.some(p=>p.uuid===uuid); }
   function togglePreset(s){
@@ -1405,7 +1431,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.31d";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.31e";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
