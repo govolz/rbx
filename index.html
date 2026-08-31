@@ -1181,32 +1181,29 @@
     placed.forEach(pl=>{
       const it=pl.item;
       const style = pl.approx
-        ? {radius:9,color:"#8b95a3",fillColor:"#8b95a3",fillOpacity:.35,weight:2,dashArray:"2,3"}
+        ? {radius:9,color:"#e0464b",fillColor:"#e0464b",fillOpacity:.4,weight:2,dashArray:"2,3"}
         : {radius:12,color:"#f5a623",fillColor:"#f5a623",fillOpacity:.7,weight:3};
       const m=L.circleMarker(pl.pos, style);
       const where = pl.approx==="state" ? esc(it.state)
                   : pl.approx==="country" ? esc(countryByCode[it.countrycode]||it.countrycode) : "";
-      const note = pl.approx ? '<div class="map-approx">≈ approximate · '+where+'</div>' : '';
-      m.bindPopup('<div class="map-pop"><b>'+esc(it.name||"Station")+'</b>'+note+
-        '<div class="map-actions">'+
-        '<button class="map-play">\u25B6 Play</button>'+
-        '<button class="map-stop">\u25A0 Stop</button>'+
-        '<button class="map-save"></button>'+
-        '</div></div>');
-      m.on("popupopen",()=>{
-        const root=document.querySelector(".leaflet-popup");
-        if(!root) return;
-        const playB=root.querySelector(".map-play");
-        const stopB=root.querySelector(".map-stop");
-        const saveB=root.querySelector(".map-save");
-        if(playB) playB.onclick=()=>play_stub(it);
-        if(stopB) stopB.onclick=stop;
-        if(saveB){
-          const lbl=()=>{ const on=it.uuid&&presets.some(x=>x.uuid===it.uuid); saveB.textContent=on?"\u2605 Saved":"\u2606 Save"; saveB.classList.toggle("on",!!on); };
-          lbl();
-          saveB.onclick=()=>{ saveMapItem(it); lbl(); };
-        }
-      });
+
+      const pop=document.createElement("div"); pop.className="map-pop";
+      const title=document.createElement("b"); title.textContent=it.name||"Station"; pop.appendChild(title);
+      if(pl.approx){
+        const note=document.createElement("div"); note.className="map-approx";
+        note.textContent="≈ approximate · "+(pl.approx==="state"?it.state:(countryByCode[it.countrycode]||it.countrycode||""));
+        pop.appendChild(note);
+      }
+      const acts=document.createElement("div"); acts.className="map-actions";
+      const pB=document.createElement("button"); pB.className="map-play"; pB.textContent="▶ Play"; pB.onclick=()=>play_stub(it);
+      const sB=document.createElement("button"); sB.className="map-stop"; sB.textContent="■ Stop"; sB.onclick=stop;
+      const vB=document.createElement("button"); vB.className="map-save";
+      const lbl=()=>{ const on=it.uuid&&presets.some(x=>x.uuid===it.uuid); vB.textContent=on?"★ Saved":"☆ Save"; vB.classList.toggle("on",!!on); };
+      lbl(); vB.onclick=()=>{ saveMapItem(it); lbl(); };
+      acts.appendChild(pB); acts.appendChild(sB); acts.appendChild(vB);
+      pop.appendChild(acts);
+      m.bindPopup(pop);
+
       m.addTo(markerLayer); pts.push(pl.pos);
     });
     $("mapNote").textContent = placed.length+" of "+items.length+" "+label+" mapped · "+exact+" exact, "+approxN+" approx"+
@@ -1408,7 +1405,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.31c";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.31d";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
