@@ -1159,8 +1159,8 @@
     placed.forEach(pl=>{
       const it=pl.item;
       const style = pl.approx
-        ? {radius:5,color:"#8b95a3",fillColor:"#8b95a3",fillOpacity:.3,weight:1,dashArray:"2,3"}
-        : {radius:7,color:"#f5a623",fillColor:"#f5a623",fillOpacity:.65,weight:2};
+        ? {radius:9,color:"#8b95a3",fillColor:"#8b95a3",fillOpacity:.35,weight:2,dashArray:"2,3"}
+        : {radius:12,color:"#f5a623",fillColor:"#f5a623",fillOpacity:.7,weight:3};
       const m=L.circleMarker(pl.pos, style);
       const where = pl.approx==="state" ? esc(it.state)
                   : pl.approx==="country" ? esc(countryByCode[it.countrycode]||it.countrycode) : "";
@@ -1386,7 +1386,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.31";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.08.31b";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
