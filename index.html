@@ -911,6 +911,7 @@
     updateStationInfo();
     $("playToggle").disabled=false;
     showFloatPlayer(); updateFpStar();
+    try{ audio.pause(); }catch(e){}          // tear down previous stream before switching
     audio.src=currentStation.url; audio.play().catch(()=>{});
     armGrace();
     document.querySelectorAll(".playbtn.playing").forEach(b=>{b.classList.remove("playing");b.innerHTML="▶ Play";});
@@ -919,7 +920,7 @@
     fetch(API_BASE+"/json/url/"+s.stationuuid).catch(()=>{});
   }
   function stop(){
-    clearGrace();
+    clearGrace(); clearStall();
     audio.pause(); audio.removeAttribute("src"); audio.load();
     document.body.classList.remove("playing");
     setNowPlaying("— stopped —");
@@ -930,7 +931,7 @@
   function togglePlay(){
     if(!audio.paused && audio.src){ clearGrace(); audio.pause(); return; }        // pause
     if(audio.src && currentUuid){                                                 // resume
-      audio.play().then(()=>armGrace()).catch(()=>toast("Couldn't resume — try next"));
+      audio.play().then(()=>armGrace()).catch(()=>reconnect());
       return;
     }
     if(lastResults.length){ play(lastResults[0]); }                              // start list
@@ -1001,6 +1002,30 @@
     if(audio.error && audio.error.code===1) return;   // MEDIA_ERR_ABORTED (from switching stations) — ignore
     autoStep();
   };
+
+  // Stall recovery: if a live stream goes silent without erroring, reload it from scratch.
+  function reconnect(){
+    if(!currentStation) return;
+    clearStall();
+    try{ audio.pause(); }catch(e){}
+    audio.src=currentStation.url;
+    audio.play().catch(()=>{});
+    armGrace();
+  }
+  let stallTimer=null;
+  function clearStall(){ if(stallTimer){ clearTimeout(stallTimer); stallTimer=null; } }
+  function onStall(){
+    if(audio.paused || stallTimer) return;   // paused by user, or already watching
+    stallTimer=setTimeout(()=>{
+      stallTimer=null;
+      if(!audio.paused && document.body.classList.contains("playing")) reconnect();
+    }, 6000);
+  }
+  audio.addEventListener("playing",   clearStall);
+  audio.addEventListener("timeupdate", clearStall);
+  audio.addEventListener("waiting",   onStall);
+  audio.addEventListener("stalled",   onStall);
+  audio.addEventListener("ended",     ()=>{ if(currentStation) reconnect(); });   // live streams shouldn't "end"
 
   // ---------- Presets ----------
   function num(v){ const n=parseFloat(v); return isFinite(n)?n:null; }
@@ -1108,6 +1133,7 @@
     updateStationInfo();
     $("playToggle").disabled=false;
     showFloatPlayer(); updateFpStar();
+    try{ audio.pause(); }catch(e){}          // tear down previous stream before switching
     audio.src=currentStation.url; audio.play().catch(()=>{});
     armGrace();
   }
@@ -1436,7 +1462,7 @@
   };
 
   // ---------- Boot ----------
-  const APP_VERSION = "26.08.31g";   // bump on each deploy (yy.mm.dd)
+  const APP_VERSION = "26.09.01";   // bump on each deploy (yy.mm.dd)
   $("appVer").textContent = "v" + APP_VERSION;
   renderPresets();
   renderFilterSlots();
